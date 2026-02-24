@@ -3,7 +3,43 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { z } from "zod";
 import { searchContacts, searchContact } from "./sevdesk/contacts.js";
 import { getInvoices, getInvoicesByContact } from "./sevdesk/invoices.js";
+import type { Contact } from "./sevdesk/types.js";
 import type { Request, Response } from "express";
+
+const STATUS_LABELS: Record<string, string> = {
+  "100": "draft",
+  "200": "open",
+  "1000": "paid",
+};
+
+function formatContactForMcp(c: Contact) {
+  return {
+    id: c.id,
+    name: c.name,
+    ...(c.customerNumber && { customerNumber: c.customerNumber }),
+    ...(c.description && { description: c.description }),
+  };
+}
+
+function formatInvoiceForMcp(inv: {
+  id: string;
+  invoiceNumber: string;
+  status: string;
+  invoiceDate: string;
+  sumNet: string;
+  sumGross: string;
+  contactName: string;
+}) {
+  return {
+    id: inv.id,
+    invoiceNumber: inv.invoiceNumber,
+    status: STATUS_LABELS[inv.status] ?? inv.status,
+    invoiceDate: inv.invoiceDate,
+    sumNet: inv.sumNet,
+    sumGross: inv.sumGross,
+    contactName: inv.contactName,
+  };
+}
 
 function createServer(): McpServer {
   const server = new McpServer({
@@ -26,7 +62,7 @@ function createServer(): McpServer {
     async ({ query }) => {
       const contacts = await searchContacts(query);
       return {
-        content: [{ type: "text", text: JSON.stringify(contacts, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(contacts.map(formatContactForMcp)) }],
       };
     }
   );
@@ -50,7 +86,7 @@ function createServer(): McpServer {
         };
       }
       return {
-        content: [{ type: "text", text: JSON.stringify(contact, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(formatContactForMcp(contact)) }],
       };
     }
   );
@@ -77,7 +113,7 @@ function createServer(): McpServer {
     async ({ startDate, endDate, status }) => {
       const invoices = await getInvoices(startDate, endDate, status);
       return {
-        content: [{ type: "text", text: JSON.stringify(invoices, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(invoices.map(formatInvoiceForMcp)) }],
       };
     }
   );
@@ -107,7 +143,7 @@ function createServer(): McpServer {
         endDate
       );
       return {
-        content: [{ type: "text", text: JSON.stringify(invoices, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify(invoices.map(formatInvoiceForMcp)) }],
       };
     }
   );

@@ -118,6 +118,7 @@ export async function createInvoiceFromQuote(quote: Quote) {
       taxType: "default",
       invoiceType: "RE",
       currency: "EUR",
+      timeToPay: templates.timeToPay,
       header: `Rechnung – ${quote.customer.companyName}`,
       headText: templates.headText,
       footText: templates.footText,

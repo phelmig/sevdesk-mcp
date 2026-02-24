@@ -13,4 +13,5 @@ export const config = {
   PORT: parseInt(process.env.PORT ?? "3000", 10),
   OPENAI_MODEL: process.env.OPENAI_MODEL ?? "gpt-5-mini",
   ENABLE_WEB_UI: process.env.ENABLE_WEB_UI !== "false",
+  ENABLE_MCP: process.env.ENABLE_MCP !== "false",
 };

@@ -418,11 +418,18 @@
 
 <!-- Search Contact -->
 <div class="panel active" id="panel-search">
-  <div class="panel-header">Contact Search · Fuzzy Match</div>
+  <div class="panel-header">Contact Search · <span id="searchModeLabel">All Matches</span></div>
   <div class="field-row">
     <div class="field">
       <label>Company Name</label>
       <input type="text" id="searchQuery" placeholder="e.g. Wohnstätten Siegen">
+    </div>
+    <div class="field" style="flex:0 0 auto; min-width: 130px;">
+      <label>Mode</label>
+      <select id="searchMode">
+        <option value="all">All matches</option>
+        <option value="best">Best match</option>
+      </select>
     </div>
     <button class="btn" id="searchBtn">Search</button>
   </div>
@@ -526,23 +533,52 @@ function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
 
 const STATUS_LABELS = { '100': 'Draft', '200': 'Open', '1000': 'Paid' };
 
-// ── Search Contact ──
+// ── Search Contacts ──
+$('#searchMode').addEventListener('change', () => {
+  const label = $('#searchMode').value === 'best' ? 'Best Match (AI)' : 'All Matches';
+  $('#searchModeLabel').textContent = label;
+});
+
 $('#searchBtn').addEventListener('click', async () => {
   const q = $('#searchQuery').value.trim();
   if (!q) return;
   const el = $('#searchResult');
+  const mode = $('#searchMode').value;
   showLoading(el);
   try {
-    const data = await api('GET', `/contacts/search?q=${encodeURIComponent(q)}`);
-    const c = data.contact;
-    el.innerHTML = `
-      <div class="result-card">
-        <div class="row">
-          <div><div class="label">Name</div><div class="value">${esc(c.name)}</div></div>
-          <div><div class="label">ID</div><div class="value">${esc(c.id)}</div></div>
-          ${c.customerNumber ? `<div><div class="label">Customer #</div><div class="value">${esc(c.customerNumber)}</div></div>` : ''}
-        </div>
-      </div>`;
+    if (mode === 'best') {
+      const data = await api('GET', `/contacts/search?q=${encodeURIComponent(q)}`);
+      const c = data.contact;
+      el.innerHTML = `
+        <div class="result-card">
+          <div class="row">
+            <div><div class="label">Name</div><div class="value">${esc(c.name)}</div></div>
+            <div><div class="label">ID</div><div class="value">${esc(c.id)}</div></div>
+            ${c.customerNumber ? `<div><div class="label">Customer #</div><div class="value">${esc(c.customerNumber)}</div></div>` : ''}
+          </div>
+        </div>`;
+    } else {
+      const data = await api('GET', `/contacts?q=${encodeURIComponent(q)}`);
+      const contacts = data.contacts;
+      if (!contacts.length) {
+        el.innerHTML = '<div class="empty-state">No contacts found</div>';
+        return;
+      }
+      el.innerHTML = `
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Name</th><th>ID</th><th>Customer #</th><th>Description</th></tr></thead>
+            <tbody>${contacts.map(c => `
+              <tr>
+                <td>${esc(c.name)}</td>
+                <td>${esc(c.id)}</td>
+                <td>${esc(c.customerNumber || '—')}</td>
+                <td>${esc(c.description || '—')}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
   } catch (e) { showError(el, e.message); }
 });
 

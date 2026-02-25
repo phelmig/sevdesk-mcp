@@ -1,4 +1,4 @@
-import { get } from "./client.js";
+import { get, post } from "./client.js";
 import { pickBestContact } from "../llm.js";
 import type { Contact } from "./types.js";
 
@@ -29,6 +29,34 @@ export async function searchContacts(query: string): Promise<Contact[]> {
   }
 
   return contacts;
+}
+
+/** Create an organization contact in SevDesk and optionally attach an address. */
+export async function createContact(customer: {
+  companyName: string;
+  street?: string;
+  zipCode?: string;
+  city?: string;
+}): Promise<Contact> {
+  const res = await post("/Contact", {
+    name: customer.companyName,
+    category: { id: 3, objectName: "Category" },
+  });
+
+  const contact: Contact = res.objects;
+
+  // Attach address if provided
+  if (customer.street || customer.zipCode || customer.city) {
+    await post("/ContactAddress", {
+      contact: { id: contact.id, objectName: "Contact" },
+      street: customer.street ?? "",
+      zip: customer.zipCode ?? "",
+      city: customer.city ?? "",
+      country: { id: 1, objectName: "StaticCountry" }, // Germany
+    });
+  }
+
+  return contact;
 }
 
 export async function searchContact(query: string): Promise<Contact | null> {

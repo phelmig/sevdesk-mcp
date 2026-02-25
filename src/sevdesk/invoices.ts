@@ -1,5 +1,5 @@
 import { get, post } from "./client.js";
-import { searchContact } from "./contacts.js";
+import { searchContact, createContact } from "./contacts.js";
 import type { Invoice, Quote } from "./types.js";
 import templates from "../invoice-templates.json" with { type: "json" };
 
@@ -48,10 +48,10 @@ async function getDefaultSevUser(): Promise<string> {
 }
 
 export async function createInvoiceFromQuote(quote: Quote) {
-  // Resolve contact
-  const contact = await searchContact(quote.customer.companyName);
+  // Resolve contact – create if not found
+  let contact = await searchContact(quote.customer.companyName);
   if (!contact) {
-    throw new Error(`Contact not found: ${quote.customer.companyName}`);
+    contact = await createContact(quote.customer);
   }
 
   const sevUserId = await getDefaultSevUser();

@@ -1,9 +1,11 @@
 import { Router } from "express";
 import {
   createInvoiceFromQuote,
+  createInvoiceFromText,
   getInvoices,
   getInvoicesByContact,
 } from "../sevdesk/invoices.js";
+import { parseInvoiceText } from "../llm.js";
 
 const router = Router();
 
@@ -30,9 +32,26 @@ router.get("/invoices", async (req, res) => {
   }
 });
 
+router.post("/invoices/from-text", async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text || typeof text !== "string") {
+      res.status(400).json({ error: "Missing 'text' field" });
+      return;
+    }
+    const parsed = await parseInvoiceText(text);
+    res.json({ parsed });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post("/invoices", async (req, res) => {
   try {
-    const result = await createInvoiceFromQuote(req.body);
+    const body = req.body;
+    const result = body.email || body.contactPerson
+      ? await createInvoiceFromText(body)
+      : await createInvoiceFromQuote(body);
     res.json({ result });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

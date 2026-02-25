@@ -39,6 +39,11 @@ export const InvoiceStatus = {
   PAID: "1000",
 } as const;
 
+export interface ParsedInvoice extends Quote {
+  contactPerson?: string;
+  email?: string;
+}
+
 export interface Quote {
   customer: {
     city: string;

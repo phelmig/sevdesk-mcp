@@ -438,13 +438,29 @@
 
 <!-- Create Invoice -->
 <div class="panel" id="panel-create">
-  <div class="panel-header">Create Invoice from Quote</div>
-  <div class="field">
-    <label>Quote JSON</label>
-    <textarea id="quoteJson"></textarea>
+  <div class="panel-header">Create Invoice</div>
+  <div style="display:flex;gap:0;margin-bottom:14px;">
+    <button class="btn" id="modeText" style="border-radius:var(--radius) 0 0 var(--radius);">Free Text</button>
+    <button class="btn" id="modeJson" style="border-radius:0 var(--radius) var(--radius) 0;opacity:0.4;">JSON</button>
   </div>
-  <div style="margin-top: 12px;">
-    <button class="btn" id="createBtn">Create Invoice</button>
+  <div id="freeTextMode">
+    <div class="field">
+      <label>Paste invoice text (German)</label>
+      <textarea id="invoiceText" placeholder="z.B. Rechnung an Mustermann GmbH, Musterstr. 1, 12345 Berlin. 5 Lizenzen Omnifact Pro à 16€/Monat für 12 Monate ab 01.03.2026. E-Mail: rechnung@mustermann.de"></textarea>
+    </div>
+    <div style="margin-top:12px;">
+      <button class="btn" id="parseBtn">Parse with AI</button>
+    </div>
+  </div>
+  <div id="jsonMode" style="display:none;">
+    <div class="field">
+      <label>Quote JSON</label>
+      <textarea id="quoteJson"></textarea>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;">
+      <button class="btn" id="createBtn">Create Invoice</button>
+      <button class="btn" id="backToText" style="opacity:0.6;">Back to Text</button>
+    </div>
   </div>
   <div class="result" id="createResult"></div>
 </div>
@@ -585,18 +601,30 @@ $('#searchBtn').addEventListener('click', async () => {
 $('#searchQuery').addEventListener('keydown', e => { if (e.key === 'Enter') $('#searchBtn').click(); });
 
 // ── Create Invoice ──
-const EXAMPLE_QUOTE = {
-  customer: { city: "Siegen", street: "An der Alche 7", zipCode: "57072", companyName: "Wohnstättengenossenschaft Siegen eG", companyDomain: "wgseg.de" },
-  document: { quoteDate: "21.01.2026", acceptanceDate: "23.01.2026" },
-  financials: { vatRate: 19, totalContractValueNet: 2100 },
-  oneTimeLineItems: [{ flatPrice: 900, productName: "Omnifact Training (Webinar)" }],
-  recurringLineItems: [
-    { seats: 7, startDate: "01.02.2026", productName: "Omnifact Pro", runtimeMonths: 12, pricePerSeatPerMonth: 16 },
-    { seats: 7, startDate: "01.02.2026", productName: "KI Fair-Use Rate", runtimeMonths: 12, pricePerSeatPerMonth: 9 }
-  ]
-};
+function setCreateMode(mode) {
+  const isText = mode === 'text';
+  $('#freeTextMode').style.display = isText ? 'block' : 'none';
+  $('#jsonMode').style.display = isText ? 'none' : 'block';
+  $('#modeText').style.opacity = isText ? '1' : '0.4';
+  $('#modeJson').style.opacity = isText ? '0.4' : '1';
+}
 
-$('#quoteJson').value = JSON.stringify(EXAMPLE_QUOTE, null, 2);
+$('#modeText').addEventListener('click', () => setCreateMode('text'));
+$('#modeJson').addEventListener('click', () => setCreateMode('json'));
+$('#backToText').addEventListener('click', () => setCreateMode('text'));
+
+$('#parseBtn').addEventListener('click', async () => {
+  const text = $('#invoiceText').value.trim();
+  if (!text) return;
+  const el = $('#createResult');
+  showLoading(el);
+  try {
+    const data = await api('POST', '/invoices/from-text', { text });
+    $('#quoteJson').value = JSON.stringify(data.parsed, null, 2);
+    setCreateMode('json');
+    el.innerHTML = '<div class="result-json" style="color:var(--green);border-color:var(--green);padding:8px 12px;">Parsed successfully — review and click Create Invoice</div>';
+  } catch (e) { showError(el, e.message); }
+});
 
 $('#createBtn').addEventListener('click', async () => {
   const el = $('#createResult');

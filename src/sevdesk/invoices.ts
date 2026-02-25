@@ -1,6 +1,6 @@
 import { get, post } from "./client.js";
-import { searchContact, createContact } from "./contacts.js";
-import type { Invoice, Quote } from "./types.js";
+import { searchContact, createContact, addEmailToContact } from "./contacts.js";
+import type { Invoice, ParsedInvoice, Quote } from "./types.js";
 import templates from "../invoice-templates.json" with { type: "json" };
 
 /** Convert YYYY-MM-DD to unix timestamp string (SevDesk requires this) */
@@ -127,6 +127,21 @@ export async function createInvoiceFromQuote(quote: Quote) {
   };
 
   return post("/Invoice/Factory/saveInvoice", body);
+}
+
+export async function createInvoiceFromText(parsed: ParsedInvoice) {
+  // Resolve contact before invoicing (same as createInvoiceFromQuote)
+  let contact = await searchContact(parsed.customer.companyName);
+  if (!contact) {
+    contact = await createContact(parsed.customer);
+  }
+
+  // Attach e-Rechnung email if provided
+  if (parsed.email) {
+    await addEmailToContact(contact.id, parsed.email);
+  }
+
+  return createInvoiceFromQuote(parsed);
 }
 
 export async function getInvoices(

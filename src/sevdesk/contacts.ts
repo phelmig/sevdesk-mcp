@@ -59,6 +59,16 @@ export async function createContact(customer: {
   return contact;
 }
 
+/** Add an email (e-Rechnung / invoice address) to a contact via CommunicationWay API */
+export async function addEmailToContact(contactId: string, email: string) {
+  return post("/CommunicationWay", {
+    contact: { id: contactId, objectName: "Contact" },
+    type: "EMAIL",
+    key: { id: "8", objectName: "CommunicationWayKey" }, // 8 = invoice address
+    value: email,
+  });
+}
+
 export async function searchContact(query: string): Promise<Contact | null> {
   const stripped = stripLegalSuffixes(query);
 

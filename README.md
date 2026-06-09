@@ -141,7 +141,17 @@ curl -X POST http://localhost:3000/mcp \
 
 ## Web UI
 
-Enabled by default at `http://localhost:3000/`. Terminal-style interface with tabs for searching contacts, creating invoices, and listing invoices.
+Local dev frontend at `http://localhost:3000/` (enabled by default, toggle with `ENABLE_WEB_UI`). Useful for testing the API without curl or an MCP client.
+
+**Search Contact** — Fuzzy company name search against SevDesk. Supports two modes: "All matches" returns every candidate, "Best match" uses AI disambiguation to pick one.
+
+**Create Invoice** — Two input modes:
+- **Free text**: Paste a natural-language invoice description in German (e.g. _"Rechnung an Mustermann GmbH, Musterstr. 1, 12345 Berlin. 5 Lizenzen Product Pro à 16€/Monat für 12 Monate ab 01.03.2026"_). The AI parses it into structured JSON, resolves the contact, and shows a dry-run preview before creating the invoice.
+- **JSON**: Directly edit the structured quote JSON. A debug toggle switches between creating the invoice and previewing a dry run.
+
+The dry-run preview shows which contact will be used (or created), line item breakdown with totals, and whether e-Rechnung will be enabled.
+
+**List Invoices** — Filter by date range, status (draft/open/paid), and optional company name.
 
 ## Project Structure
 

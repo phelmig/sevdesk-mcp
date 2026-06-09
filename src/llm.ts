@@ -7,27 +7,43 @@ const openai = createOpenAI({ apiKey: config.OPENAI_API_KEY });
 
 export async function pickBestContact(
   query: string,
-  candidates: Contact[]
+  candidates: Contact[],
+  customerContext?: { city?: string; street?: string; zipCode?: string }
 ): Promise<Contact | null> {
   if (candidates.length === 0) return null;
-  if (candidates.length === 1) return candidates[0];
 
   const list = candidates
     .map((c, i) => `${i}: ${c.name} (ID: ${c.id})`)
     .join("\n");
+
+  let context = "";
+  if (customerContext) {
+    const parts = [customerContext.street, customerContext.zipCode, customerContext.city]
+      .filter(Boolean);
+    if (parts.length > 0) context = `\nCustomer address: ${parts.join(", ")}`;
+  }
 
   const result = await generate({
     model: openai.chatModel(config.OPENAI_MODEL),
     messages: [
       {
         role: "user",
-        content: `Given the search query "${query}", which of these contacts is the best match? Reply with ONLY the index number (0-based).\n\n${list}`,
+        content: `I need to find the company "${query}" in our contacts database. Which contact, if any, is the SAME company?${context}
+
+Candidates:
+${list}
+
+Rules:
+- The contact must be the SAME company, not just sharing a word (e.g. "Energy Hub" is NOT "NRW.Energy4Climate")
+- Ignore legal suffixes (GmbH, AG, etc.) when comparing
+- When in doubt, reply -1
+- Reply with ONLY the index number (0-based), or -1 if none match`,
       },
     ],
   });
 
   const idx = parseInt((result.content ?? "").trim(), 10);
-  if (isNaN(idx) || idx < 0 || idx >= candidates.length) return candidates[0];
+  if (isNaN(idx) || idx < 0 || idx >= candidates.length) return null;
   return candidates[idx];
 }
 

@@ -397,6 +397,105 @@
     font-family: var(--mono);
     font-size: 11px;
   }
+
+  /* ── Debug toggle ── */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .toggle-row input[type="checkbox"] {
+    appearance: none;
+    width: 32px;
+    height: 16px;
+    background: var(--border);
+    border-radius: 8px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+
+  .toggle-row input[type="checkbox"]::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    background: var(--text-dim);
+    border-radius: 50%;
+    transition: all 0.15s;
+  }
+
+  .toggle-row input[type="checkbox"]:checked {
+    background: var(--accent-dim);
+  }
+
+  .toggle-row input[type="checkbox"]:checked::after {
+    left: 18px;
+    background: var(--accent);
+  }
+
+  .toggle-row label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  /* ── Dry run result ── */
+  .dryrun-section {
+    margin-bottom: 12px;
+  }
+
+  .dryrun-section .section-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 6px;
+  }
+
+  .dryrun-action {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text);
+  }
+
+  .dryrun-action .action-badge {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .action-badge.create { background: rgba(90, 158, 111, 0.15); color: var(--green); }
+  .action-badge.existing { background: rgba(90, 127, 181, 0.15); color: var(--blue); }
+  .action-badge.email { background: rgba(196, 163, 90, 0.15); color: var(--accent); }
+
+  .dryrun-totals {
+    display: flex;
+    gap: 24px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+  }
 </style>
 </head>
 <body>
@@ -422,7 +521,7 @@
   <div class="field-row">
     <div class="field">
       <label>Company Name</label>
-      <input type="text" id="searchQuery" placeholder="e.g. Wohnstätten Siegen">
+      <input type="text" id="searchQuery" placeholder="e.g. Mustermann GmbH">
     </div>
     <div class="field" style="flex:0 0 auto; min-width: 130px;">
       <label>Mode</label>
@@ -446,7 +545,7 @@
   <div id="freeTextMode">
     <div class="field">
       <label>Paste invoice text (German)</label>
-      <textarea id="invoiceText" placeholder="z.B. Rechnung an Mustermann GmbH, Musterstr. 1, 12345 Berlin. 5 Lizenzen Omnifact Pro à 16€/Monat für 12 Monate ab 01.03.2026. E-Mail: rechnung@mustermann.de"></textarea>
+      <textarea id="invoiceText" placeholder="z.B. Rechnung an Mustermann GmbH, Musterstr. 1, 12345 Berlin. 5 Lizenzen Product Pro à 16€/Monat für 12 Monate ab 01.03.2026. E-Mail: rechnung@mustermann.de"></textarea>
     </div>
     <div style="margin-top:12px;">
       <button class="btn" id="parseBtn">Parse with AI</button>
@@ -457,9 +556,13 @@
       <label>Quote JSON</label>
       <textarea id="quoteJson"></textarea>
     </div>
-    <div style="margin-top:12px;display:flex;gap:8px;">
+    <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
       <button class="btn" id="createBtn">Create Invoice</button>
       <button class="btn" id="backToText" style="opacity:0.6;">Back to Text</button>
+      <div class="toggle-row" style="margin-bottom:0;margin-left:auto;">
+        <input type="checkbox" id="debugToggle">
+        <label for="debugToggle">Debug</label>
+      </div>
     </div>
   </div>
   <div class="result" id="createResult"></div>
@@ -622,8 +725,15 @@ $('#parseBtn').addEventListener('click', async () => {
     const data = await api('POST', '/invoices/from-text', { text });
     $('#quoteJson').value = JSON.stringify(data.parsed, null, 2);
     setCreateMode('json');
-    el.innerHTML = '<div class="result-json" style="color:var(--green);border-color:var(--green);padding:8px 12px;">Parsed successfully — review and click Create Invoice</div>';
+    // Immediately run dry run to show preview
+    el.innerHTML = '<span class="spinner">Resolving contact</span>';
+    const preview = await api('POST', '/invoices', { ...data.parsed, dryRun: true });
+    showDryRun(el, preview);
   } catch (e) { showError(el, e.message); }
+});
+
+$('#debugToggle').addEventListener('change', () => {
+  $('#createBtn').textContent = $('#debugToggle').checked ? 'Preview Invoice' : 'Create Invoice';
 });
 
 $('#createBtn').addEventListener('click', async () => {
@@ -631,12 +741,75 @@ $('#createBtn').addEventListener('click', async () => {
   let body;
   try { body = JSON.parse($('#quoteJson').value); }
   catch { showError(el, 'Invalid JSON'); return; }
+
+  const debug = $('#debugToggle').checked;
+  if (debug) body.dryRun = true;
+
   showLoading(el);
   try {
     const data = await api('POST', '/invoices', body);
-    showJson(el, data);
+    if (debug && data.dryRun) {
+      showDryRun(el, data);
+    } else {
+      const invId = data.result?.objects?.invoice?.id;
+      const linkHtml = invId
+        ? `<div style="margin-bottom:10px;"><a href="https://my.sevdesk.de/fi/edit/type/RE/id/${esc(invId)}" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent-dim);">Open invoice in SevDesk</a></div>`
+        : '';
+      el.innerHTML = linkHtml + `<div class="result-json">${esc(JSON.stringify(data, null, 2))}</div>`;
+    }
   } catch (e) { showError(el, e.message); }
 });
+
+function showDryRun(el, data) {
+  const a = data.actions;
+  const inv = data.invoice;
+
+  let contactHtml = '';
+  if (a.contact.action === 'use_existing') {
+    contactHtml = `<div class="dryrun-action"><span class="action-badge existing">Existing</span> Use contact <strong>${esc(a.contact.name)}</strong> (ID: ${esc(a.contact.id)})</div>`;
+  } else {
+    contactHtml = `<div class="dryrun-action"><span class="action-badge create">Create</span> New contact <strong>${esc(a.contact.customer.companyName)}</strong> — ${esc(a.contact.customer.street)}, ${esc(a.contact.customer.zipCode)} ${esc(a.contact.customer.city)}</div>`;
+  }
+
+  let emailHtml = '';
+  if (a.email) {
+    emailHtml = `<div class="dryrun-action"><span class="action-badge email">Email</span> Add e-Rechnung address <strong>${esc(a.email.email)}</strong></div>`;
+  }
+
+  const itemsHtml = inv.lineItems.map(li => `
+    <tr>
+      <td>${esc(li.name)}</td>
+      <td>${li.text ? esc(li.text) : '—'}</td>
+      <td class="num">${li.quantity}</td>
+      <td class="num">${fmt(li.unitPrice)}</td>
+      <td class="num">${fmt(li.totalNet)}</td>
+      <td class="num">${li.taxRate}%</td>
+    </tr>`).join('');
+
+  el.innerHTML = `
+    <div class="result-card" style="border-color:var(--accent-dim);">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;">Dry Run Preview</div>
+      <div class="dryrun-section">
+        <div class="section-title">Actions</div>
+        ${contactHtml}
+        ${emailHtml}
+      </div>
+      <div class="dryrun-section">
+        <div class="section-title">Invoice — ${esc(inv.header)}${inv.eRechnung ? ' <span class="action-badge email" style="margin-left:8px;">e-Rechnung</span>' : ''}</div>
+        <div class="table-wrap" style="max-height:none;">
+          <table class="data-table">
+            <thead><tr><th>Item</th><th>Description</th><th class="num">Qty</th><th class="num">Unit Price</th><th class="num">Total Net</th><th class="num">VAT</th></tr></thead>
+            <tbody>${itemsHtml}</tbody>
+          </table>
+        </div>
+        <div class="dryrun-totals">
+          <div><span style="color:var(--text-dim);">Net:</span> ${fmt(inv.totalNet)}</div>
+          <div><span style="color:var(--text-dim);">Gross:</span> ${fmt(inv.totalGross)}</div>
+          <div><span style="color:var(--text-dim);">Payment:</span> ${inv.timeToPay} days</div>
+        </div>
+      </div>
+    </div>`;
+}
 
 // ── List Invoices ──
 $('#listBtn').addEventListener('click', async () => {

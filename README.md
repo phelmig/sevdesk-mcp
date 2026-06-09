@@ -19,6 +19,8 @@ ENABLE_WEB_UI=true
 ENABLE_MCP=true
 ```
 
+**Invoice templates** — Default templates live in `src/invoice-templates.json`. To customize, create `invoice-templates.local.json` in the project root (gitignored) — it fully replaces the defaults when present.
+
 ## Run
 
 ```bash
@@ -40,7 +42,7 @@ GET /api/health
 ### Search Contact
 
 ```
-GET /api/contacts/search?q=Wohnstätten Siegen
+GET /api/contacts/search?q=Mustermann GmbH
 ```
 
 Strips legal suffixes (GmbH, eG, etc.), searches SevDesk contacts, uses GPT-4o-mini to pick the best match when ambiguous.
@@ -49,7 +51,7 @@ Strips legal suffixes (GmbH, eG, etc.), searches SevDesk contacts, uses GPT-4o-m
 
 ```
 GET /api/invoices?startDate=2026-01-01&endDate=2026-12-31&status=200
-GET /api/invoices?contactQuery=Wohnstätten&startDate=2026-01-01
+GET /api/invoices?contactQuery=Mustermann&startDate=2026-01-01
 ```
 
 | Param | Description |

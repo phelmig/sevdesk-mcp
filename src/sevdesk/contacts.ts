@@ -5,8 +5,14 @@ import type { Contact } from "./types.js";
 const LEGAL_SUFFIXES =
   /\s*(GmbH|AG|eG|e\.G\.|e\.V\.|eV|KG|OHG|UG|SE|Ltd|Inc|Corp|mbH|gGmbH|Co\.|& Co\.)\s*/gi;
 
+const TITLE_PREFIXES = /^(Dr\.|Prof\.|Ing\.|Dipl\.|St\.)\s+/i;
+
 function stripLegalSuffixes(name: string): string {
   return name.replace(LEGAL_SUFFIXES, " ").trim();
+}
+
+function stripTitlePrefixes(name: string): string {
+  return name.replace(TITLE_PREFIXES, "").trim();
 }
 
 /** Return all fuzzy-matched contacts without LLM disambiguation */
@@ -19,7 +25,8 @@ export async function searchContacts(query: string): Promise<Contact[]> {
   );
 
   if (contacts.length === 0) {
-    const firstWord = stripped.split(/\s+/)[0];
+    const fallbackBase = stripTitlePrefixes(stripped);
+    const firstWord = fallbackBase.split(/\s+/)[0];
     if (firstWord && firstWord !== stripped) {
       const res2 = await get("/Contact", { depth: "0", name: firstWord });
       contacts = (res2.objects ?? []).filter(
@@ -59,32 +66,43 @@ export async function createContact(customer: {
   return contact;
 }
 
-/** Add an email (e-Rechnung / invoice address) to a contact via CommunicationWay API */
+/** Add email to a contact as both work email and invoice address */
 export async function addEmailToContact(contactId: string, email: string) {
-  return post("/CommunicationWay", {
-    contact: { id: contactId, objectName: "Contact" },
-    type: "EMAIL",
-    key: { id: "8", objectName: "CommunicationWayKey" }, // 8 = invoice address
-    value: email,
-  });
+  const contactRef = { id: contactId, objectName: "Contact" };
+  await Promise.all([
+    post("/CommunicationWay", {
+      contact: contactRef,
+      type: "EMAIL",
+      key: { id: "2", objectName: "CommunicationWayKey" }, // 2 = work
+      value: email,
+    }),
+    post("/CommunicationWay", {
+      contact: contactRef,
+      type: "EMAIL",
+      key: { id: "8", objectName: "CommunicationWayKey" }, // 8 = invoice address
+      value: email,
+    }),
+  ]);
 }
 
-export async function searchContact(query: string): Promise<Contact | null> {
+export async function searchContact(
+  query: string,
+  customerContext?: { city?: string; street?: string; zipCode?: string }
+): Promise<Contact | null> {
   const stripped = stripLegalSuffixes(query);
 
-  // Try full stripped name first (SevDesk `name` param does contains-search)
   const res = await get("/Contact", {
     depth: "0",
     name: stripped,
   });
 
   let contacts: Contact[] = (res.objects ?? []).filter(
-    (c: any) => c.name && c.category?.id === "3" // category 3 = organization
+    (c: any) => c.name && c.category?.id === "3"
   );
 
-  // If no results, try first word
   if (contacts.length === 0) {
-    const firstWord = stripped.split(/\s+/)[0];
+    const fallbackBase = stripTitlePrefixes(stripped);
+    const firstWord = fallbackBase.split(/\s+/)[0];
     if (firstWord && firstWord !== stripped) {
       const res2 = await get("/Contact", {
         depth: "0",
@@ -97,7 +115,6 @@ export async function searchContact(query: string): Promise<Contact | null> {
   }
 
   if (contacts.length === 0) return null;
-  if (contacts.length === 1) return contacts[0];
 
-  return pickBestContact(query, contacts);
+  return pickBestContact(query, contacts, customerContext);
 }

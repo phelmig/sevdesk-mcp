@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createInvoiceFromQuote,
   createInvoiceFromText,
+  dryRunInvoice,
   getInvoices,
   getInvoicesByContact,
 } from "../sevdesk/invoices.js";
@@ -48,7 +49,14 @@ router.post("/invoices/from-text", async (req, res) => {
 
 router.post("/invoices", async (req, res) => {
   try {
-    const body = req.body;
+    const { dryRun, ...body } = req.body;
+
+    if (dryRun) {
+      const result = await dryRunInvoice(body);
+      res.json(result);
+      return;
+    }
+
     const result = body.email || body.contactPerson
       ? await createInvoiceFromText(body)
       : await createInvoiceFromQuote(body);

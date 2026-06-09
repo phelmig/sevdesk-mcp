@@ -1,7 +1,7 @@
 import { get, post } from "./client.js";
 import { searchContact, createContact, addEmailToContact } from "./contacts.js";
-import type { Invoice, ParsedInvoice, Quote } from "./types.js";
-import templates from "../invoice-templates.json" with { type: "json" };
+import type { ParsedInvoice, Quote } from "./types.js";
+import { templates, resolveTemplate, classifyLineItem } from "../templates.js";
 
 /** Convert YYYY-MM-DD to unix timestamp string (SevDesk requires this) */
 function toTimestamp(dateStr: string): string {
@@ -23,41 +23,9 @@ function formatDE(d: Date): string {
   return `${dd}.${mm}.${d.getFullYear()}`;
 }
 
-/** Resolve {{ var }} placeholders in a template string */
-function resolveTemplate(
-  tpl: string,
-  vars: Record<string, string | number>
-): string {
-  return tpl.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key) =>
-    String(vars[key] ?? `{{ ${key} }}`)
-  );
-}
 
-/** Classify a recurring line item product name */
-function classifyLineItem(productName: string): "aiUsage" | "license" {
-  const lower = productName.toLowerCase();
-  if (lower.includes("fair-use") || lower.includes("budget")) return "aiUsage";
-  return "license";
-}
-
-async function getDefaultSevUser(): Promise<string> {
-  const res = await get("/SevUser", {});
-  const users = res.objects ?? [];
-  if (users.length === 0) throw new Error("No SevUser found");
-  return users[0].id;
-}
-
-export async function createInvoiceFromQuote(quote: Quote) {
-  // Resolve contact – create if not found
-  let contact = await searchContact(quote.customer.companyName);
-  if (!contact) {
-    contact = await createContact(quote.customer);
-  }
-
-  const sevUserId = await getDefaultSevUser();
-
-  // Build line items
-  const invoicePosSave: any[] = [];
+function buildLineItems(quote: Quote) {
+  const items: any[] = [];
   let posIdx = 0;
 
   for (const item of quote.recurringLineItems) {
@@ -66,18 +34,23 @@ export async function createInvoiceFromQuote(quote: Quote) {
     const start = parseDate(item.startDate);
     const end = new Date(start);
     end.setMonth(end.getMonth() + item.runtimeMonths);
+    const duration = item.runtimeMonths === 1 ? "1 Monat" : `${item.runtimeMonths} Monate`;
     const text = resolveTemplate(tpl, {
-      monthNum: item.runtimeMonths,
+      duration,
       startDate: formatDE(start),
       endDate: formatDE(end),
     });
 
-    invoicePosSave.push({
+    const itemName = category === "license"
+      ? `${item.productName} ${duration}`
+      : item.productName;
+
+    items.push({
       objectName: "InvoicePos",
       mapAll: true,
       quantity: item.seats,
       price: item.pricePerSeatPerMonth * item.runtimeMonths,
-      name: item.productName,
+      name: itemName,
       text,
       unity: { id: "1", objectName: "Unity" },
       taxRate: quote.financials.vatRate,
@@ -86,7 +59,7 @@ export async function createInvoiceFromQuote(quote: Quote) {
   }
 
   for (const item of quote.oneTimeLineItems) {
-    invoicePosSave.push({
+    items.push({
       objectName: "InvoicePos",
       mapAll: true,
       quantity: 1,
@@ -98,50 +71,127 @@ export async function createInvoiceFromQuote(quote: Quote) {
     });
   }
 
-  // Build invoice
+  return items;
+}
+
+async function getDefaultSevUser(): Promise<string> {
+  const res = await get("/SevUser", {});
+  const users = res.objects ?? [];
+  if (users.length === 0) throw new Error("No SevUser found");
+  return users[0].id;
+}
+
+async function getSepaPaymentMethod(): Promise<{ id: string; objectName: string } | null> {
+  const res = await get("/PaymentMethod", {});
+  const methods = res.objects ?? [];
+  const sepa = methods.find((m: any) =>
+    /sepa|überweisung/i.test(m.name)
+  );
+  return sepa ? { id: sepa.id, objectName: "PaymentMethod" } : null;
+}
+
+export async function createInvoiceFromQuote(
+  quote: Quote,
+  opts?: { eRechnung?: boolean }
+) {
+  let contact = await searchContact(quote.customer.companyName, quote.customer);
+  if (!contact) {
+    contact = await createContact(quote.customer);
+  }
+
+  const [sevUserId, paymentMethod] = await Promise.all([
+    getDefaultSevUser(),
+    getSepaPaymentMethod(),
+  ]);
+  const invoicePosSave = buildLineItems(quote);
   const today = new Date().toISOString().split("T")[0];
 
-  const body = {
-    invoice: {
-      objectName: "Invoice",
-      mapAll: true,
-      invoiceNumber: null, // auto-generate
-      contact: { id: contact.id, objectName: "Contact" },
-      contactPerson: { id: sevUserId, objectName: "SevUser" },
-      invoiceDate: today,
-      discount: 0,
-      status: 100, // Draft
-      addressCountry: { id: 1, objectName: "StaticCountry" },
-      taxRate: 0,
-      taxRule: { id: "1", objectName: "TaxRule" },
-      taxText: "Umsatzsteuer 19%",
-      taxType: "default",
-      invoiceType: "RE",
-      currency: "EUR",
-      timeToPay: templates.timeToPay,
-      header: `Rechnung – ${quote.customer.companyName}`,
-      headText: templates.headText,
-      footText: templates.footText,
-    },
-    invoicePosSave,
+  const invoice: Record<string, any> = {
+    objectName: "Invoice",
+    mapAll: true,
+    invoiceNumber: null,
+    contact: { id: contact.id, objectName: "Contact" },
+    contactPerson: { id: sevUserId, objectName: "SevUser" },
+    invoiceDate: today,
+    discount: 0,
+    status: 100,
+    addressName: quote.customer.companyName,
+    addressStreet: quote.customer.street ?? "",
+    addressZip: quote.customer.zipCode ?? "",
+    addressCity: quote.customer.city ?? "",
+    addressCountry: { id: 1, objectName: "StaticCountry" },
+    taxRate: 0,
+    taxRule: { id: "1", objectName: "TaxRule" },
+    taxText: "Umsatzsteuer 19%",
+    taxType: "default",
+    invoiceType: "RE",
+    currency: "EUR",
+    timeToPay: templates.timeToPay,
+    header: `Rechnung – ${quote.customer.companyName}`,
+    headText: templates.headText,
+    footText: templates.footText,
+    ...(paymentMethod && { paymentMethod }),
   };
 
-  return post("/Invoice/Factory/saveInvoice", body);
+  if (opts?.eRechnung) {
+    invoice.propertyIsEInvoice = true;
+  }
+
+  return post("/Invoice/Factory/saveInvoice", { invoice, invoicePosSave });
+}
+
+export async function dryRunInvoice(input: ParsedInvoice | Quote) {
+  const parsed = input as ParsedInvoice;
+  const existingContact = await searchContact(input.customer.companyName, input.customer);
+  const lineItems = buildLineItems(input);
+
+  const summary = lineItems.map((li: any) => ({
+    name: li.name,
+    text: li.text,
+    quantity: li.quantity,
+    unitPrice: li.price,
+    totalNet: li.quantity * li.price,
+    taxRate: li.taxRate,
+  }));
+
+  const totalNet = summary.reduce((s: number, li: any) => s + li.totalNet, 0);
+  const totalGross = summary.reduce(
+    (s: number, li: any) => s + li.totalNet * (1 + li.taxRate / 100),
+    0
+  );
+
+  return {
+    dryRun: true,
+    actions: {
+      contact: existingContact
+        ? { action: "use_existing", name: existingContact.name, id: existingContact.id }
+        : { action: "create_new", customer: input.customer },
+      email: parsed.email
+        ? { action: "add_email", email: parsed.email }
+        : null,
+    },
+    invoice: {
+      header: `Rechnung – ${input.customer.companyName}`,
+      eRechnung: !!parsed.email,
+      timeToPay: templates.timeToPay,
+      lineItems: summary,
+      totalNet,
+      totalGross,
+    },
+  };
 }
 
 export async function createInvoiceFromText(parsed: ParsedInvoice) {
-  // Resolve contact before invoicing (same as createInvoiceFromQuote)
-  let contact = await searchContact(parsed.customer.companyName);
+  let contact = await searchContact(parsed.customer.companyName, parsed.customer);
   if (!contact) {
     contact = await createContact(parsed.customer);
   }
 
-  // Attach e-Rechnung email if provided
   if (parsed.email) {
     await addEmailToContact(contact.id, parsed.email);
   }
 
-  return createInvoiceFromQuote(parsed);
+  return createInvoiceFromQuote(parsed, { eRechnung: !!parsed.email });
 }
 
 export async function getInvoices(

@@ -2,3 +2,4 @@ node_modules
 dist
 .env
 example_quote.json
+invoice-templates.local.json

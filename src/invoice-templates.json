@@ -1,9 +1,9 @@
 {
   "timeToPay": 14,
-  "headText": "Sehr geehrte Damen und Herren,<br>vielen Dank für Ihr Vertrauen in Omnifact.<br><br>Wie vereinbart erlauben wir uns, die folgenden Positionen in Rechnung zu stellen:",
+  "headText": "Sehr geehrte Damen und Herren,<br>vielen Dank für Ihr Vertrauen.<br><br>Wie vereinbart erlauben wir uns, die folgenden Positionen in Rechnung zu stellen:",
   "footText": "Der Rechnungsbetrag wird mit Zahlungsziel bis zum [%ZAHLUNGSZIEL%] fällig.<br><br>Bei Fragen stehen wir Ihnen gerne zur Verfügung.<br><br>Mit freundlichen Grüßen<br>[%KONTAKTPERSON%]",
   "lineItemText": {
-    "license": "Omnifact KI Plattform je Nutzer {{ monthNum }} Monate, Laufzeit {{ startDate }} - {{ endDate }}",
-    "aiUsage": "Omnifact KI Budget je Nutzer {{ monthNum }} Monate, Laufzeit {{ startDate }} - {{ endDate }}"
+    "license": "KI Plattform je Nutzer {{ duration }}, Laufzeit {{ startDate }} - {{ endDate }}",
+    "aiUsage": "KI Budget je Nutzer {{ duration }}, Laufzeit {{ startDate }} - {{ endDate }}"
   }
 }

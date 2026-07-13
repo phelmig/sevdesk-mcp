@@ -29,6 +29,7 @@ router.get("/invoices", async (req, res) => {
       res.json({ invoices });
     }
   } catch (err: any) {
+    console.error("[GET /invoices]", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -43,6 +44,7 @@ router.post("/invoices/from-text", async (req, res) => {
     const parsed = await parseInvoiceText(text);
     res.json({ parsed });
   } catch (err: any) {
+    console.error("[POST /invoices/from-text]", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -62,6 +64,7 @@ router.post("/invoices", async (req, res) => {
       : await createInvoiceFromQuote(body);
     res.json({ result });
   } catch (err: any) {
+    console.error("[POST /invoices]", err);
     res.status(500).json({ error: err.message });
   }
 });

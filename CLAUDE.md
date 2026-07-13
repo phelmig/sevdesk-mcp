@@ -15,7 +15,7 @@ Tests use Node's built-in test runner (`node:test`) via tsx. No linter is config
 
 ## Environment
 
-Requires `.env` with `SEVDESK_API_KEY` and `OPENAI_API_KEY` (see `.env.example`). The `API_KEY` env var (default `"dev"`) is the Bearer token for all API and MCP requests.
+Requires `.env` with `SEVDESK_API_KEY` and an LLM provider key (see `.env.example`). Set `AI_PROVIDER=openai` (default) or `AI_PROVIDER=anthropic` to switch between OpenAI and Anthropic. Only the selected provider's API key is required. The `API_KEY` env var (default `"dev"`) is the Bearer token for all API and MCP requests.
 
 ## Architecture
 
@@ -36,11 +36,11 @@ Both REST and MCP are enabled by default; toggled via `ENABLE_MCP` / `ENABLE_WEB
 
 ### LLM layer (`src/llm.ts`)
 
-Uses `@core-ai/core-ai` + `@core-ai/openai` (not the OpenAI SDK directly). Two functions:
+Uses `@core-ai/core-ai` with swappable providers (`@core-ai/openai` or `@core-ai/anthropic`). Two functions:
 - `pickBestContact` — disambiguates multiple contact search results
 - `parseInvoiceText` — extracts structured `ParsedInvoice` from German free-text
 
-Model is configurable via `OPENAI_MODEL` env var (default: `gpt-5-mini`).
+Provider is selected via `AI_PROVIDER` env var (`openai` or `anthropic`). Model is configurable via `OPENAI_MODEL` (default: `gpt-5-mini`) or `ANTHROPIC_MODEL` (default: `claude-sonnet-4-6`).
 
 ### MCP tools
 

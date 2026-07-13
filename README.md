@@ -12,7 +12,11 @@ cp .env.example .env  # fill in your keys
 **.env**
 ```
 SEVDESK_API_KEY=...
-OPENAI_API_KEY=...
+AI_PROVIDER=openai     # openai (default) | anthropic
+OPENAI_API_KEY=...     # required when AI_PROVIDER=openai
+OPENAI_MODEL=gpt-5-mini
+ANTHROPIC_API_KEY=...  # required when AI_PROVIDER=anthropic
+ANTHROPIC_MODEL=claude-sonnet-4-6
 API_KEY=dev            # bearer token for this service
 PORT=3000
 ENABLE_WEB_UI=true
@@ -45,7 +49,7 @@ GET /api/health
 GET /api/contacts/search?q=Mustermann GmbH
 ```
 
-Strips legal suffixes (GmbH, eG, etc.), searches SevDesk contacts, uses GPT-4o-mini to pick the best match when ambiguous.
+Strips legal suffixes (GmbH, eG, etc.), searches SevDesk contacts, uses AI to pick the best match when ambiguous.
 
 ### List Invoices
 
@@ -160,7 +164,7 @@ src/
 ├── config.ts                # env config
 ├── index.ts                 # express app
 ├── mcp.ts                   # MCP server + tool definitions
-├── llm.ts                   # gpt-4o-mini fuzzy matching
+├── llm.ts                   # AI-powered fuzzy matching (OpenAI or Anthropic)
 ├── middleware/auth.ts        # bearer auth
 ├── sevdesk/
 │   ├── client.ts            # SevDesk HTTP client

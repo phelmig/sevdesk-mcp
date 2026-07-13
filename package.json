@@ -9,6 +9,7 @@
     "test": "tsx --test src/**/*.test.ts"
   },
   "dependencies": {
+    "@core-ai/anthropic": "^0.2.0",
     "@core-ai/core-ai": "^0.2.0",
     "@core-ai/openai": "^0.2.0",
     "@modelcontextprotocol/sdk": "^1.27.1",

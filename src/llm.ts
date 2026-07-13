@@ -1,9 +1,17 @@
 import { createOpenAI } from "@core-ai/openai";
-import { generate } from "@core-ai/core-ai";
+import { createAnthropic } from "@core-ai/anthropic";
+import { generate, type ChatModel } from "@core-ai/core-ai";
 import { config } from "./config.js";
 import type { Contact, ParsedInvoice } from "./sevdesk/types.js";
 
-const openai = createOpenAI({ apiKey: config.OPENAI_API_KEY });
+function getModel(): ChatModel {
+  if (config.AI_PROVIDER === "anthropic") {
+    const anthropic = createAnthropic({ apiKey: config.ANTHROPIC_API_KEY });
+    return anthropic.chatModel(config.ANTHROPIC_MODEL);
+  }
+  const openai = createOpenAI({ apiKey: config.OPENAI_API_KEY });
+  return getModel();
+}
 
 export async function pickBestContact(
   query: string,
@@ -24,7 +32,7 @@ export async function pickBestContact(
   }
 
   const result = await generate({
-    model: openai.chatModel(config.OPENAI_MODEL),
+    model: getModel(),
     messages: [
       {
         role: "user",
@@ -42,7 +50,8 @@ Rules:
     ],
   });
 
-  const idx = parseInt((result.content ?? "").trim(), 10);
+  const match = (result.content ?? "").match(/-?\d+/);
+  const idx = match ? parseInt(match[0], 10) : NaN;
   if (isNaN(idx) || idx < 0 || idx >= candidates.length) return null;
   return candidates[idx];
 }
@@ -51,7 +60,7 @@ export async function parseInvoiceText(text: string): Promise<ParsedInvoice> {
   const today = new Date().toISOString().split("T")[0];
 
   const result = await generate({
-    model: openai.chatModel(config.OPENAI_MODEL),
+    model: getModel(),
     messages: [
       {
         role: "system",
@@ -85,8 +94,8 @@ export async function parseInvoiceText(text: string): Promise<ParsedInvoice> {
       "pricePerSeatPerMonth": number
     }
   ],
-  "contactPerson": string | undefined,  // name of contact person if mentioned
-  "email": string | undefined           // email for e-Rechnung if mentioned
+  "contactPerson": string | null,  // name of contact person if mentioned, null if not
+  "email": string | null           // email for e-Rechnung if mentioned, null if not
 }
 
 Rules:
@@ -103,7 +112,17 @@ Rules:
   });
 
   const raw = (result.content ?? "").trim();
-  // Strip markdown fences if present
-  const json = raw.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
-  return JSON.parse(json) as ParsedInvoice;
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end === -1) {
+    console.error("[parseInvoiceText] No JSON object in LLM response:\n", raw);
+    throw new Error("No JSON object in LLM response");
+  }
+  const jsonStr = raw.slice(start, end + 1);
+  try {
+    return JSON.parse(jsonStr) as ParsedInvoice;
+  } catch (err) {
+    console.error("[parseInvoiceText] Failed to parse LLM response:\n", raw);
+    throw err;
+  }
 }

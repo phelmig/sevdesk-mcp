@@ -14,6 +14,7 @@ router.get("/contacts", async (req, res) => {
     const contacts = await searchContacts(q);
     res.json({ contacts });
   } catch (err: any) {
+    console.error("[GET /contacts]", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -33,6 +34,7 @@ router.get("/contacts/search", async (req, res) => {
     }
     res.json({ contact });
   } catch (err: any) {
+    console.error("[GET /contacts/search]", err);
     res.status(500).json({ error: err.message });
   }
 });

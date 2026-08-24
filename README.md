@@ -33,6 +33,15 @@ npm run build  # tsc → dist/
 npm start      # node dist/index.js
 ```
 
+## Test
+
+```bash
+npm test                     # unit tests
+npm run test:mcp             # end-to-end MCP test against the running dev server:
+                             # lists tools, parses sample text, shows dry-run preview
+npm run test:mcp -- --create # same, but actually creates the draft invoice in SevDesk
+```
+
 ## API
 
 All endpoints require `Authorization: Bearer <API_KEY>`.
@@ -93,6 +102,10 @@ Enabled by default at `POST /mcp`. Uses [Streamable HTTP transport](https://mode
 | `search_contact` | Same fuzzy search but returns the single best match using AI disambiguation. |
 | `get_invoices` | List invoices with optional `startDate`, `endDate`, and `status` filters. |
 | `get_invoices_by_contact` | List invoices for a specific company (resolved via `search_contact`). |
+| `parse_invoice_text` | AI-parse a free-text (German) invoice description into structured invoice data — same parser as `POST /api/invoices/from-text`. |
+| `create_invoice` | Create a draft invoice from structured data (auto-creates the contact, adds e-Rechnung email if given). Supports `dryRun: true` for a preview. Returns the created invoice plus a direct SevDesk link. |
+
+The text-to-invoice workflow via MCP: `parse_invoice_text` → review (optionally `create_invoice` with `dryRun: true`) → `create_invoice`.
 
 ### Response format
 

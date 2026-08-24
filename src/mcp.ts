@@ -2,7 +2,14 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { searchContacts, searchContact } from "./sevdesk/contacts.js";
-import { getInvoices, getInvoicesByContact } from "./sevdesk/invoices.js";
+import {
+  getInvoices,
+  getInvoicesByContact,
+  createInvoiceFromQuote,
+  createInvoiceFromText,
+  dryRunInvoice,
+} from "./sevdesk/invoices.js";
+import { parseInvoiceText } from "./llm.js";
 import type { Contact } from "./sevdesk/types.js";
 import type { Request, Response } from "express";
 
@@ -46,7 +53,7 @@ function createServer(): McpServer {
     name: "ag-sevdesk",
     version: "1.0.0",
     description:
-      "Access SevDesk accounting data — search contacts (customers/suppliers) and query invoices.",
+      "Access SevDesk accounting data — search contacts (customers/suppliers), query invoices, and create draft invoices from free text or structured data.",
   });
 
   server.tool(
@@ -144,6 +151,128 @@ function createServer(): McpServer {
       );
       return {
         content: [{ type: "text", text: JSON.stringify(invoices.map(formatInvoiceForMcp)) }],
+      };
+    }
+  );
+
+  server.tool(
+    "parse_invoice_text",
+    "Parse a free-text invoice description (German) into structured invoice data using AI. Returns customer, dates, financials, and line items in the exact format expected by create_invoice. This is step 1 of the text-to-invoice workflow: parse_invoice_text → (optionally create_invoice with dryRun: true to preview) → create_invoice.",
+    {
+      text: z
+        .string()
+        .describe(
+          "Free-text invoice description, e.g. 'Rechnung an Mustermann GmbH, Musterstr. 1, 12345 Berlin. 5 Lizenzen Product Pro à 16€/Monat für 12 Monate ab 01.03.2026, Ansprechpartner Max Mustermann, Rechnung per E-Mail an max@mustermann.de'"
+        ),
+    },
+    async ({ text }) => {
+      const parsed = await parseInvoiceText(text);
+      return {
+        content: [{ type: "text", text: JSON.stringify(parsed) }],
+      };
+    }
+  );
+
+  server.tool(
+    "create_invoice",
+    "Create a draft invoice in SevDesk from structured invoice data (as returned by parse_invoice_text). The contact is resolved via fuzzy search and auto-created if not found. If an email is given, it is added to the contact and the invoice is flagged as e-Rechnung. Set dryRun: true to preview what would happen (contact resolution, line items, totals) without creating anything. On success returns the created invoice and a direct link to it in SevDesk.",
+    {
+      customer: z
+        .object({
+          companyName: z.string().describe("Company name"),
+          street: z.string().default("").describe("Street and house number"),
+          zipCode: z.string().default("").describe("Postal code"),
+          city: z.string().default("").describe("City"),
+          companyDomain: z.string().default("").describe("Company website domain, if known"),
+        })
+        .describe("Customer the invoice is addressed to"),
+      document: z
+        .object({
+          quoteDate: z.string().describe("Quote date (DD.MM.YYYY)"),
+          acceptanceDate: z.string().describe("Acceptance date (DD.MM.YYYY)"),
+        })
+        .describe("Document dates"),
+      financials: z
+        .object({
+          vatRate: z.number().describe("VAT rate in percent: 19 for German companies, 0 for non-DE/reverse-charge"),
+          totalContractValueNet: z.number().describe("Total net contract value in EUR"),
+        })
+        .describe("Financial summary"),
+      oneTimeLineItems: z
+        .array(
+          z.object({
+            productName: z.string(),
+            flatPrice: z.number().describe("One-time net price in EUR"),
+          })
+        )
+        .default([])
+        .describe("One-time (non-recurring) line items"),
+      recurringLineItems: z
+        .array(
+          z.object({
+            productName: z.string(),
+            seats: z.number().describe("Number of seats/licenses"),
+            pricePerSeatPerMonth: z.number().describe("Net price per seat per month in EUR"),
+            runtimeMonths: z.number().describe("Contract runtime in months"),
+            startDate: z.string().describe("Start date (DD.MM.YYYY)"),
+          })
+        )
+        .default([])
+        .describe("Recurring (subscription) line items"),
+      contactPerson: z
+        .string()
+        .optional()
+        .describe("Name of the contact person at the customer, if mentioned"),
+      email: z
+        .string()
+        .optional()
+        .describe("Email address for e-Rechnung delivery, if mentioned"),
+      dryRun: z
+        .boolean()
+        .default(false)
+        .describe("If true, only preview: shows contact resolution, line items, and totals without creating the invoice"),
+    },
+    async ({ dryRun, ...input }) => {
+      if (dryRun) {
+        const preview = await dryRunInvoice(input);
+        return {
+          content: [{ type: "text", text: JSON.stringify(preview) }],
+        };
+      }
+
+      const result = input.email || input.contactPerson
+        ? await createInvoiceFromText(input)
+        : await createInvoiceFromQuote(input);
+
+      const invoice = result?.objects?.invoice;
+      if (!invoice?.id) {
+        // Unexpected response shape — return it raw so the agent can see what happened
+        return {
+          content: [{ type: "text", text: JSON.stringify(result) }],
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              invoice: {
+                id: invoice.id,
+                invoiceNumber: invoice.invoiceNumber,
+                status: STATUS_LABELS[String(invoice.status)] ?? invoice.status,
+                invoiceDate: invoice.invoiceDate,
+                header: invoice.header,
+                addressName: invoice.addressName,
+                sumNet: invoice.sumNet,
+                sumGross: invoice.sumGross,
+                currency: invoice.currency,
+                eRechnung: !!input.email,
+              },
+              url: `https://my.sevdesk.de/fi/edit/type/RE/id/${invoice.id}`,
+            }),
+          },
+        ],
       };
     }
   );

@@ -9,6 +9,7 @@ npm run dev          # start dev server with tsx watch (auto-reload)
 npm run build        # tsc → dist/
 npm start            # run production build (node dist/index.js)
 npm test             # run tests (node:test via tsx)
+npm run test:mcp     # e2e MCP test against running dev server (add -- --create to really create an invoice)
 ```
 
 Tests use Node's built-in test runner (`node:test`) via tsx. No linter is configured.

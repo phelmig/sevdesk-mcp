@@ -6,7 +6,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "tsx --test src/**/*.test.ts"
+    "test": "tsx --test src/**/*.test.ts",
+    "test:mcp": "tsx scripts/test-mcp.ts"
   },
   "dependencies": {
     "@core-ai/anthropic": "^0.2.0",

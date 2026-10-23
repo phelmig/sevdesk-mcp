@@ -17,7 +17,7 @@ OPENAI_API_KEY=...     # required when AI_PROVIDER=openai
 OPENAI_MODEL=gpt-5-mini
 ANTHROPIC_API_KEY=...  # required when AI_PROVIDER=anthropic
 ANTHROPIC_MODEL=claude-sonnet-4-6
-API_KEY=dev            # bearer token for this service
+API_KEY=...            # required: bearer token for this service (long random value in production)
 PORT=3000
 ENABLE_WEB_UI=true
 ENABLE_MCP=true

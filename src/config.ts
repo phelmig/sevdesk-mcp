@@ -13,7 +13,7 @@ export const config = {
   AI_PROVIDER,
   OPENAI_API_KEY: AI_PROVIDER === "openai" ? required("OPENAI_API_KEY") : process.env.OPENAI_API_KEY ?? "",
   ANTHROPIC_API_KEY: AI_PROVIDER === "anthropic" ? required("ANTHROPIC_API_KEY") : process.env.ANTHROPIC_API_KEY ?? "",
-  API_KEY: process.env.API_KEY ?? "dev",
+  API_KEY: required("API_KEY"),
   PORT: parseInt(process.env.PORT ?? "3000", 10),
   OPENAI_MODEL: process.env.OPENAI_MODEL ?? "gpt-5-mini",
   ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6",
